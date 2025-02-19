@@ -21,9 +21,22 @@ def load_data():
     file_path = os.path.join("data", "weather_suply.xlsx")
     sheet_name = "일별기온공급량"
     df = pd.read_excel(file_path, sheet_name=sheet_name, engine='openpyxl')
+
     df['연'] = df['날짜'].dt.year
     df['월'] = df['날짜'].dt.month
-    df['요일'] = df['날짜'].dt.day_name(locale='ko_KR')
+
+    # 영어 요일 -> 한글 요일 매핑
+    weekday_map = {
+        "Monday": "월요일",
+        "Tuesday": "화요일",
+        "Wednesday": "수요일",
+        "Thursday": "목요일",
+        "Friday": "금요일",
+        "Saturday": "토요일",
+        "Sunday": "일요일",
+    }
+    df['요일'] = df['날짜'].dt.day_name().map(weekday_map)
+
     return df[['날짜', '평균기온', '공급량(M3)', '공급량(MJ)', '연', '월', '요일']]
 
 data = load_data()
