@@ -16,7 +16,7 @@ st.title("일별 기온 예측")
 
 @st.cache_data
 def load_data():
-    file_path = os.path.join(os.path.dirname(__file__), 'data', 'weather_supply.xlsx')
+    file_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'weather_supply.xlsx')
     sheet_name = "일별기온공급량"
     df = pd.read_excel(file_path, sheet_name=sheet_name, engine='openpyxl')
     return df[['날짜', '최고기온', '최저기온', '평균기온']]
