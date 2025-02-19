@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
@@ -17,7 +18,7 @@ st.title("일별 공급량 예측")
 
 @st.cache_data
 def load_data():
-    file_path = r"data\날씨공급량.xlsx"
+    file_path = os.path.join(os.path.dirname(__file__), 'data', 'weather_supply.xlsx')
     sheet_name = "일별기온공급량"
     df = pd.read_excel(file_path, sheet_name=sheet_name, engine='openpyxl')
     df['연'] = df['날짜'].dt.year
