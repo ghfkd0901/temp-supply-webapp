@@ -1,13 +1,11 @@
 import os
 import streamlit as st
 import pandas as pd
+from pathlib import Path
+import holidays
 import plotly.graph_objects as go
 from datetime import datetime
 
-if "authenticated" not in st.session_state or not st.session_state["authenticated"]:
-    st.error("⚠️ 접근 권한이 없습니다. 메인 페이지에서 비밀번호 인증을 해주세요.")
-    st.stop()
-    
 st.set_page_config(layout="wide")
 
 st.title("일별 기온 및 공급량 분석")
@@ -18,21 +16,51 @@ st.markdown("""
 - **공휴일 데이터**: Python `holidays` 패키지 활용
 """)
 
+# ✅ 프로젝트 루트 디렉토리 기준 상대경로 설정
+BASE_DIR = Path(os.getcwd())  
+DATA_PATH = BASE_DIR / "data" / "weather_supply.csv"
+
+# ✅ 1️⃣ 데이터 로드 함수 (CSV 파일 사용, 컬럼명을 한국어로 변경)
 @st.cache_data
 def load_data():
-    file_path = os.path.join("data", "weather_suply.xlsx")
-    sheet_name = "일별기온공급량"
-    df = pd.read_excel(file_path, sheet_name=sheet_name, engine='openpyxl')
-    df = df[['날짜', '평균기온', '공급량(M3)', '공급량(MJ)', '연', '월', '일', '요일', '공휴일']]
-    df['연'] = df['연'].astype(int)
-    df['월'] = df['월'].astype(int)
-    df['일'] = df['일'].astype(int)
+    """CSV 파일에서 데이터 로드 및 컬럼명 한국어로 변경"""
+    df = pd.read_csv(DATA_PATH, encoding='utf-8', sep=',')
+    
+    column_mapping = {
+        'date': '날짜',
+        'avg_temp': '평균기온',
+        'max_temp': '최고기온',
+        'min_temp': '최저기온',
+        'supply_m3': '공급량(M3)',
+        'supply_mj': '공급량(MJ)',
+    }
+    
+    df.rename(columns=column_mapping, inplace=True)
+    return df[['날짜', '평균기온', '최고기온', '최저기온', '공급량(M3)', '공급량(MJ)']]
+
+# ✅ 2️⃣ 컬럼 추가 함수
+def add_columns(df):
+    """데이터프레임에 연, 월, 일, 요일, 공휴일 컬럼 추가"""
+    df = df.copy()
+    df['날짜'] = pd.to_datetime(df['날짜'])
+    df['연'] = df['날짜'].dt.year
+    df['월'] = df['날짜'].dt.month
+    df['일'] = df['날짜'].dt.day
+
+    weekday_map = {0: "월", 1: "화", 2: "수", 3: "목", 4: "금", 5: "토", 6: "일"}
+    df['요일'] = df['날짜'].dt.weekday.map(weekday_map)
+    
+    kr_holidays = holidays.KR(years=df['연'].unique())
+    df['공휴일'] = df['날짜'].apply(lambda x: kr_holidays.get(x, ""))
+
     return df
 
+# ✅ 데이터 로드 및 컬럼 추가 적용
 data = load_data()
+data = add_columns(data)
 
 st.sidebar.title("🗓 필터 선택")
-default_years = [2023, 2024, 2025]
+default_years = [2024, 2025]
 current_month = datetime.today().month
 
 selected_years = st.sidebar.multiselect("연도 선택", sorted(data['연'].unique()), default=default_years)
@@ -55,39 +83,40 @@ scatter_fig = go.Figure()
 # (4) 공급량 누적 그래프
 cumulative_fig = go.Figure()
 
+# ✅ 요일 및 공휴일 표시 개선
 if not filtered_data.empty:
     for year in selected_years:
         year_data = filtered_data[filtered_data['연'] == year].copy()
         year_data['누적공급량(M3)'] = year_data['공급량(M3)'].cumsum()
 
-        marker_symbols = []
-        marker_sizes = []
-        marker_texts = []
+        # ✅ 마커 설정
+        marker_texts = []  # 요일 또는 공휴일 텍스트
+        marker_sizes = []  # 마커 크기 조정 (공휴일 강조)
 
         for _, row in year_data.iterrows():
-            if pd.notna(row['공휴일']):
-                marker_symbols.append('star')
-                marker_sizes.append(12)
-                marker_texts.append(row['공휴일'])
+            if show_day_info:
+                if row['공휴일']:  # 공휴일이 있으면 공휴일 이름을 표시
+                    marker_texts.append(row['공휴일'])
+                    marker_sizes.append(12)  # 공휴일 강조 (크기 증가)
+                else:
+                    marker_texts.append(row['요일'])
+                    marker_sizes.append(8)  # 일반 요일 (기본 크기)
+
             else:
-                marker_symbols.append('circle')
+                marker_texts.append("")  # 표시하지 않음
                 marker_sizes.append(8)
-                marker_texts.append(row['요일'])
 
-        if not show_day_info:
-            marker_texts = [''] * len(marker_texts)
-
-        # (1) 평균기온 변화
+        # (1) 평균기온 변화 그래프 (꺾은선 + 마커)
         temp_fig.add_trace(go.Scatter(
             x=year_data['월일'], y=year_data['평균기온'],
             mode='lines+markers+text' if show_day_info else 'lines+markers',
             name=f"{year} 평균기온",
             line=dict(color=color_map.get(year)),
-            marker=dict(size=marker_sizes, symbol=marker_symbols),
+            marker=dict(size=marker_sizes, symbol='circle'),
             text=marker_texts, textposition='top center', textfont=dict(size=9)
         ))
 
-        # (2) 공급량 변화 (막대그래프)
+        # (2) 공급량 변화 그래프 (막대그래프)
         supply_fig.add_trace(go.Bar(
             x=year_data['월일'], y=year_data['공급량(M3)'],
             name=f"{year} 공급량(M3)",
@@ -95,10 +124,10 @@ if not filtered_data.empty:
             width=0.3
         ))
 
-        # (3) 기온 vs 공급량 상관관계
+        # (3) 기온 vs 공급량 상관관계 그래프
         scatter_fig.add_trace(go.Scatter(
             x=year_data['평균기온'], y=year_data['공급량(M3)'],
-            mode='markers+text',
+            mode='markers+text' if show_day_info else 'markers',
             name=f"{year} 상관관계",
             marker=dict(size=10, color=color_map.get(year), line=dict(width=0.5, color='black')),
             text=marker_texts, textposition='top center', textfont=dict(size=9)
@@ -113,6 +142,7 @@ if not filtered_data.empty:
             marker=dict(size=6)
         ))
 
+
 col1, col2 = st.columns(2)
 with col1:
     st.plotly_chart(temp_fig, use_container_width=True)
@@ -121,38 +151,3 @@ with col1:
 with col2:
     st.plotly_chart(supply_fig, use_container_width=True)
     st.plotly_chart(cumulative_fig, use_container_width=True)
-
-st.write("### 필터링된 데이터")
-st.dataframe(
-    filtered_data[['날짜', '평균기온', '공급량(M3)', '공급량(MJ)', '요일', '공휴일']],
-    height=600
-)
-
-#############################################################################################
-
-# 📊 (5) 연도별 일별 평균기온 히트맵 생성
-pivot_table = filtered_data.pivot_table(
-    values='평균기온',
-    index='연',
-    columns='월일'
-)
-
-heatmap_fig = go.Figure(data=go.Heatmap(
-    z=pivot_table.values,
-    x=pivot_table.columns,
-    y=pivot_table.index,
-    colorscale='blues',
-    text=pivot_table.values.round(1),
-    texttemplate="%{text}",
-    hoverongaps=False
-))
-
-heatmap_fig.update_layout(
-    title="연도별 일별 평균기온 히트맵",
-    xaxis_nticks=len(pivot_table.columns),
-    yaxis_nticks=len(pivot_table.index),
-    height=600
-)
-
-st.write("### 연도별 일별 평균기온 히트맵")
-st.plotly_chart(heatmap_fig, use_container_width=True)

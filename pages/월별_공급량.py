@@ -2,10 +2,6 @@ import os
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-
-if "authenticated" not in st.session_state or not st.session_state["authenticated"]:
-    st.error("⚠️ 접근 권한이 없습니다. 메인 페이지에서 비밀번호 인증을 해주세요.")
-    st.stop()
     
 st.title("월별 공급량 및 기온 분석")
 st.markdown("데이터 출처: [기상자료개방포털](https://data.kma.go.kr/climate/RankState/selectRankStatisticsDivisionList.do?pgmNo=179)")

@@ -2,25 +2,54 @@ import os
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import holidays
+from pathlib import Path
 import plotly.subplots as sp
 
-if "authenticated" not in st.session_state or not st.session_state["authenticated"]:
-    st.error("⚠️ 접근 권한이 없습니다. 메인 페이지에서 비밀번호 인증을 해주세요.")
-    st.stop()
-    
 st.title("월별 공급량 및 기온 분석")
 
+# ✅ 프로젝트 루트 디렉토리 기준 상대경로 설정
+BASE_DIR = Path(os.getcwd())  
+DATA_PATH = BASE_DIR / "data" / "weather_supply.csv"
+
+# ✅ 1️⃣ 데이터 로드 함수 (CSV 파일 사용, 컬럼명을 한국어로 변경)
 @st.cache_data
 def load_data():
-    file_path = os.path.join("data", "weather_suply.xlsx")
-    sheet_name = "일별기온공급량"
-    df = pd.read_excel(file_path, sheet_name=sheet_name, engine='openpyxl')
-    df = df[['날짜', '평균기온', '연', '월', '일', '공급량(M3)', '공급량(MJ)', '공휴일']]
-    df['연'] = df['연'].astype(int)
-    df['월'] = df['월'].astype(int)
+    """CSV 파일에서 데이터 로드 및 컬럼명 한국어로 변경"""
+    df = pd.read_csv(DATA_PATH, encoding='utf-8', sep=',')
+    
+    column_mapping = {
+        'date': '날짜',
+        'avg_temp': '평균기온',
+        'max_temp': '최고기온',
+        'min_temp': '최저기온',
+        'supply_m3': '공급량(M3)',
+        'supply_mj': '공급량(MJ)',
+    }
+    
+    df.rename(columns=column_mapping, inplace=True)
+    return df[['날짜', '평균기온', '최고기온', '최저기온', '공급량(M3)', '공급량(MJ)']]
+
+# ✅ 2️⃣ 컬럼 추가 함수
+def add_columns(df):
+    """데이터프레임에 연, 월, 일, 요일, 공휴일 컬럼 추가"""
+    df = df.copy()
+    df['날짜'] = pd.to_datetime(df['날짜'])
+    df['연'] = df['날짜'].dt.year
+    df['월'] = df['날짜'].dt.month
+    df['일'] = df['날짜'].dt.day
+
+    weekday_map = {0: "월", 1: "화", 2: "수", 3: "목", 4: "금", 5: "토", 6: "일"}
+    df['요일'] = df['날짜'].dt.weekday.map(weekday_map)
+    
+    kr_holidays = holidays.KR(years=df['연'].unique())
+    df['공휴일'] = df['날짜'].apply(lambda x: kr_holidays.get(x, ""))
+
     return df
 
+# ✅ 데이터 로드 및 컬럼 추가 적용
 data = load_data()
+data = add_columns(data)
 
 default_years = [2023, 2024, 2025]
 selected_years = st.sidebar.multiselect("연도 선택", sorted(data['연'].unique()), default=default_years)
