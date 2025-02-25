@@ -127,3 +127,32 @@ st.dataframe(
     filtered_data[['날짜', '평균기온', '공급량(M3)', '공급량(MJ)', '요일', '공휴일']],
     height=600
 )
+
+#############################################################################################
+
+# 📊 (5) 연도별 일별 평균기온 히트맵 생성
+pivot_table = filtered_data.pivot_table(
+    values='평균기온',
+    index='연',
+    columns='월일'
+)
+
+heatmap_fig = go.Figure(data=go.Heatmap(
+    z=pivot_table.values,
+    x=pivot_table.columns,
+    y=pivot_table.index,
+    colorscale='blues',
+    text=pivot_table.values.round(1),
+    texttemplate="%{text}",
+    hoverongaps=False
+))
+
+heatmap_fig.update_layout(
+    title="연도별 일별 평균기온 히트맵",
+    xaxis_nticks=len(pivot_table.columns),
+    yaxis_nticks=len(pivot_table.index),
+    height=600
+)
+
+st.write("### 연도별 일별 평균기온 히트맵")
+st.plotly_chart(heatmap_fig, use_container_width=True)
